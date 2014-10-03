@@ -37,155 +37,155 @@ import warnings
 
 class NuMap(object):
     """
-    ``NuMap`` is a parallel (thread- or process-based, local or remote), 
-    buffered, multi-task, ``itertools.imap`` or ``multiprocessing.Pool.imap`` 
+    ``NuMap`` is a parallel (thread- or process-based, local or remote),
+    buffered, multi-task, ``itertools.imap`` or ``multiprocessing.Pool.imap``
     function replacment. Like ``imap`` it evaluates a function on elements of a
-    sequence or iterable, and it does so lazily. Laziness can be adjusted via 
-    the "stride" and  "buffer" arguments. Unlike ``imap``, ``NuMap`` supports 
-    **multiple pairs** of function and iterable **tasks**. The **tasks** are 
+    sequence or iterable, and it does so lazily. Laziness can be adjusted via
+    the "stride" and  "buffer" arguments. Unlike ``imap``, ``NuMap`` supports
+    **multiple pairs** of function and iterable **tasks**. The **tasks** are
     **not** queued rather they are **interwoven** and share a pool or **worker**
     "processes" or "threads" and a memory "buffer".
-    
-    
+
+
     *Pool*
- 
-    The pool is a set of managed **worker** processes or threads. The choice of 
-    the "worker_type" has a **fundamental** impact on the performance of the 
+
+    The pool is a set of managed **worker** processes or threads. The choice of
+    the "worker_type" has a **fundamental** impact on the performance of the
     map. As a general rule use "process" if you have multiple CPUs or CPU-cores
-    and  your task functions are cpu-bound. Use "thread" if your function is 
-    IO-bound e.g. retrieves data from the Web. Increasing the number of 
+    and  your task functions are cpu-bound. Use "thread" if your function is
+    IO-bound e.g. retrieves data from the Web. Increasing the number of
     **workers** above the number of CPUs makes sense only if these are "thread"
-    based **workers** and the evaluated functions are IO-bound. Some CPU-bound 
+    based **workers** and the evaluated functions are IO-bound. Some CPU-bound
     tasks might evaluate faster if the number of **worker** processes equals the
-    number of CPUs + 1. For "thread" based  ``NuMaps`` a larger number of 
+    number of CPUs + 1. For "thread" based  ``NuMaps`` a larger number of
     **workers** of might improve performance. The "worker_num" argument must not
-    **not** include workers needed to run remote processes and can be equal 
+    **not** include workers needed to run remote processes and can be equal
     ``0`` for a purely remote ``NuMaps``.
 
 
     *Iteration*
- 
+
     Results are retrieve through iteration. A single ``NuMap`` instance supports
-    iteration over results from many **tasks**. This means that it supports 
-    multiple end-points. The default is to iterate over the results from the 
-    first task. An iterator for a single **task** is returned by the 
+    iteration over results from many **tasks**. This means that it supports
+    multiple end-points. The default is to iterate over the results from the
+    first task. An iterator for a single **task** is returned by the
     ``NuMap.get_task`` method.
-    
-    
+
+
     *Order*
- 
+
     The tasks can be interdependent i.e. the results from one **task** being the
-    input to a second **task**. The order in which **tasks** are added to the 
-    ``NuMap`` instance is important. It affects the order of evaluation and 
-    consequently the order in which results should be retrieved. If the 
-    **tasks** are chained then the "order" must be a valid topological sort 
+    input to a second **task**. The order in which **tasks** are added to the
+    ``NuMap`` instance is important. It affects the order of evaluation and
+    consequently the order in which results should be retrieved. If the
+    **tasks** are chained then the "order" must be a valid topological sort
     (reverse topological order). If the ``NuMap`` is ordered the n-th result for
-    a specific **task** the will be always be available before the n+1-th 
+    a specific **task** the will be always be available before the n+1-th
     result. If "order" is ``False`` the results will be available in the order
     they are calculated.
-    
-    
+
+
     *Skipping*
 
     The "skipping" argument determines how to respond to ``TimeoutErrors`` it is
-    ignored if no "timeout" value is given to the ``NuMap.next`` method. If 
-    "skipping" is ``True`` results, which are not calculated on time will be 
+    ignored if no "timeout" value is given to the ``NuMap.next`` method. If
+    "skipping" is ``True`` results, which are not calculated on time will be
     omitted. If "skip" ``False`` an exception will be raised, but the result can
-    be retrieved later. If **tasks** are chained a ``TimeoutError`` will 
+    be retrieved later. If **tasks** are chained a ``TimeoutError`` will
     collapse the ``NuMap`` evaluation. Do **not* specify timeouts in for
     chained **tasks**.
 
-    
+
     *Parallel evaluation*
-    
-    The parallelism of the evaluation is strictly defined by the "stride", 
-    "buffer" and the total number of **workers** in the pool. The **worker** 
+
+    The parallelism of the evaluation is strictly defined by the "stride",
+    "buffer" and the total number of **workers** in the pool. The **worker**
     number is obviously the upper bound of concurrently evaluated elements.
-    The maximum number of elements from a single **task** evauluated in 
+    The maximum number of elements from a single **task** evauluated in
     parallel is defined by "stride". The "buffer" limits the maximum number of
-    pending results for all **tasks** it is a function of "stride", but also 
-    of the topology of dependencies between the tasks. A long "stride" improves 
-    parallelism, but increases "buffer" memory requirements. It should not be 
+    pending results for all **tasks** it is a function of "stride", but also
+    of the topology of dependencies between the tasks. A long "stride" improves
+    parallelism, but increases "buffer" memory requirements. It should not be
     smaller than the number of pool **workers**, because some will be idle. The
-    size of the "buffer"  is larger or equal to "stride" because a **task** 
+    size of the "buffer"  is larger or equal to "stride" because a **task**
     might depend on results from multiple up-stream **tasks**.
-  
-    The minimum "stride" and "buffer is ``1`` therefore the results from the 
+
+    The minimum "stride" and "buffer is ``1`` therefore the results from the
     "buffer" must be removed in the same order as input elements are evaluated.
-    Otherwise the ``NuMap`` might dead-lock. 
-    
-    An element is buffered until it is returned by the ``NuMap.next`` method. 
-    Starting the ``NuMap`` will cause one element (the first from the first 
+    Otherwise the ``NuMap`` might dead-lock.
+
+    An element is buffered until it is returned by the ``NuMap.next`` method.
+    Starting the ``NuMap`` will cause one element (the first from the first
     **task** to be submitted to the pool. For "stride" equal to ``1``, the next
-    queued element is the first from the second **task**, which can enter the 
-    pool only if either the first result is retrieved (i.e. ``NuMap.next`` 
-    returns) or the "buffer" is larger then the "stride". If the "buffer" is 
-    ``n`` then ``n`` tasklets can enter the pool. A "stride" of ``n`` requires 
-    at least ``n`` elements to enter the pool, therefore "buffer" cannot be 
+    queued element is the first from the second **task**, which can enter the
+    pool only if either the first result is retrieved (i.e. ``NuMap.next``
+    returns) or the "buffer" is larger then the "stride". If the "buffer" is
+    ``n`` then ``n`` tasklets can enter the pool. A "stride" of ``n`` requires
+    at least ``n`` elements to enter the pool, therefore "buffer" cannot be
     smaller then "stride". The "minimum" buffer is the maximum possible number
-    of queued results. This number depends on the interdependencies between 
-    **tasks** and the "stride". The default is conservative and sufficient for 
-    all topologies.  If the **tasks** are chained i.e. the output from one is 
+    of queued results. This number depends on the interdependencies between
+    **tasks** and the "stride". The default is conservative and sufficient for
+    all topologies.  If the **tasks** are chained i.e. the output from one is
     consumed by another thenat most one i-th element from each chained **task**
-    is at a given moment in the pool. In those cases the minimum "buffer" to 
-    satisfy the worst case number of queued results is lower then the safe 
+    is at a given moment in the pool. In those cases the minimum "buffer" to
+    satisfy the worst case number of queued results is lower then the safe
     default.
-    
-    
+
+
     *Stopping*
-    
-    The ``NuMap`` can be stopped at any time, however some buffered results 
+
+    The ``NuMap`` can be stopped at any time, however some buffered results
     might be lost and up to 2 * "stride" additional input elements comsumed.
     If pending buffered results are not retrieved the ``NuMap`` might not shut
-    down properly. 
-    
-    
+    down properly.
+
+
     Arguments:
-    
+
       - func (callable) [default: ``None``] If the ``NuMap`` is given a function
         it is used to define the first and only task of the ``NuMap``
-      - iterable (iterable) [default: ``None``] a sequence of first arguments 
+      - iterable (iterable) [default: ``None``] a sequence of first arguments
         for "func" required if "func" is given
-      - args (``tuple``) [default: ``None``] optional, see: ``NuMap.add_task`` 
+      - args (``tuple``) [default: ``None``] optional, see: ``NuMap.add_task``
       - kwargs (``dict``) [default: ``None``] optional, see: ``NuMap.add_task``
-      - worker_type(``'process'`` or ``'thread'``) [default: ``'process'``] 
-        Defines the type of internally spawned pool workers. For 
-        ``multiprocessing.Process`` based worker choose 'process' for 
+      - worker_type(``'process'`` or ``'thread'``) [default: ``'process'``]
+        Defines the type of internally spawned pool workers. For
+        ``multiprocessing.Process`` based worker choose 'process' for
         ``threading.Thread`` workers choose 'thread'.
-      - worker_num(int) [default: number of CPUs, min: 1] The number of workers 
-        to spawn locally. Defaults to the number of availble CPUs, which is a 
+      - worker_num(int) [default: number of CPUs, min: 1] The number of workers
+        to spawn locally. Defaults to the number of availble CPUs, which is a
         reasonable choice for process-based  ``NuMaps``.
       - worker_remote(iterable) [default: ``None``] A sequence of "remote host"
         "remote worker_num" tuples e.g.
-        ``(('localhost', 2]), ('127.0.0.1', 2))`` "remote worker_num" is the 
-        number of workers processes per remote host. A custom ``TCP`` port can 
+        ``(('localhost', 2]), ('127.0.0.1', 2))`` "remote worker_num" is the
+        number of workers processes per remote host. A custom ``TCP`` port can
         be specified ``(('localhost:6666',2),)``.
       - stride(``int``) [default: automatic] number of elements from a **task**
         evaluated in parallel
-      - buffer(``int``) [default: automatic] total number number of elements 
+      - buffer(``int``) [default: automatic] total number number of elements
         (inputs and results) in the ``NuMap`` instance
-      - ordered(``bool``) [default: ``True``] If ``True`` the output of all 
+      - ordered(``bool``) [default: ``True``] If ``True`` the output of all
         **tasks** will be ordered see: order.
       - skip(``bool``) [default: ``False``] Should we skip a result if trying to
-        retrieve it raised a  ``TimeoutError``? 
-      - name(``str``) [default: "imap_id(id(object))"] an optional name to 
-        associate with this ``NuMap`` instance. It should be unique. Useful for 
-        code generation.            
+        retrieve it raised a  ``TimeoutError``?
+      - name(``str``) [default: "imap_id(id(object))"] an optional name to
+        associate with this ``NuMap`` instance. It should be unique. Useful for
+        code generation.
 
     Restrictions:
-    
+
       - a completely lazy i.e. "buffer-free" evaluation is not supported
-      - if remote workers are enabled, "worker_type" has to be the default 
+      - if remote workers are enabled, "worker_type" has to be the default
         "process".
-        
+
     """
 
     @staticmethod
     def _pool_put(pool_semaphore, tasks, put_to_pool_in, pool_size, id_self, \
                   is_stopping):
-        """ 
-        (internal) Intended to be run in a seperate thread. Feeds tasks into 
-        to the pool whenever semaphore permits. Finishes if self._stopping is 
+        """
+        (internal) Intended to be run in a seperate thread. Feeds tasks into
+        to the pool whenever semaphore permits. Finishes if self._stopping is
         set.
         """
         log.debug('NuMap(%s) started pool_putter.' % id_self)
@@ -229,7 +229,7 @@ class NuMap(object):
                                                            (id_self, pool_size))
                     # this kills the pool_putter
                     break
-                # multiple StopIterations for a tasks are ignored. 
+                # multiple StopIterations for a tasks are ignored.
                 # This is for stride.
                 continue
 
@@ -250,15 +250,15 @@ class NuMap(object):
     @staticmethod
     def _pool_get(get, results, next_available, task_next_lock, to_skip, \
                   task_num, pool_size, id_self):
-        """ 
+        """
         (internal) Intended to be run in a separate thread and take results from
-        the pool and put them into queues depending on the task of the result. 
+        the pool and put them into queues depending on the task of the result.
         It finishes if it receives termination-sentinels from all pool workers.
         """
         log.debug('NuMap(%s) started pool_getter' % id_self)
-        # should return when all workers have returned, each worker sends a 
+        # should return when all workers have returned, each worker sends a
         # sentinel before returning. Before returning it should send sentinels to
-        # all tasks but the next available queue should be released only if we 
+        # all tasks but the next available queue should be released only if we
         # know that no new results will arrive.
         sentinels = 0
         result_ids, last_result_id, very_last_result_id = {}, {}, {}
@@ -304,7 +304,7 @@ class NuMap(object):
 
             # got some result for some task, which might be an exception
             task, i, is_valid, real_result = result
-            # locked if next for this task is in 
+            # locked if next for this task is in
             # the process of raising a TimeoutError
             task_next_lock[task].acquire()
             log.debug('NuMap(%s) pool_getter received result %s for task %s)' % \
@@ -327,7 +327,7 @@ class NuMap(object):
                           (id_self, i, task))
 
             # this releases the next method for each ordered result in the queue
-            # if the NuMap instance is ordered =False this information is 
+            # if the NuMap instance is ordered =False this information is
             # ommitted.
             while last_result_id[task] + 1 in result_ids[task]:
                 next_available[task].put(True)
@@ -393,7 +393,7 @@ class NuMap(object):
             self._putout = self._outqueue.put
 
         # combine tasks into a weaved queue
-        self._next_available = {}   # per-task boolean queue 
+        self._next_available = {}   # per-task boolean queue
                                     # releases next to get a result
         self._next_skipped = {}     # per-task int, number of results
                                     # to skip (locked)
@@ -478,7 +478,7 @@ class NuMap(object):
             self._pool_putter.join()
             for worker in self.pool:
                 worker.join()
-            # remove threads  
+            # remove threads
             del self._pool_putter
             del self._pool_getter
             del self.pool
@@ -491,34 +491,34 @@ class NuMap(object):
 
     def add_task(self, func, iterable, args=None, kwargs=None, timeout=None, \
                 block=True, track=False):
-        """ 
-        Adds a **task** to evaluate. A **task** is jointly a function or 
+        """
+        Adds a **task** to evaluate. A **task** is jointly a function or
         callable an iterable with optional arguments and keyworded arguments.
         The iterable can be the result iterator of a previously added **task**
         (to the same or to a different ``NuMap`` instance).
 
         Arguments:
-        
-          - func (callable) this will be called on each element of the 
-            "iterable" and supplied with arguments "args" and keyworded 
+
+          - func (callable) this will be called on each element of the
+            "iterable" and supplied with arguments "args" and keyworded
             arguments "kwargs"
-          - iterable (iterable) this must be a sequence of *picklable* objects 
+          - iterable (iterable) this must be a sequence of *picklable* objects
             which will be the first arguments passed to the "func"
-          - args (``tuple``) [default: ``None``] A ``tuple`` of optional 
+          - args (``tuple``) [default: ``None``] A ``tuple`` of optional
             constant arguments passed to the callable "func" after the first
             argument from the "iterable"
-          - kwargs (``dict``) [default: ``None``] A dictionary of keyworded 
-            arguments passed to "func" after the variable argument from the 
+          - kwargs (``dict``) [default: ``None``] A dictionary of keyworded
+            arguments passed to "func" after the variable argument from the
             "iterable" and the arguments from "args"
           - timeout (``bool``) see: ``_NuMapTask``
           - block (``bool``) see: ``_NuMapTask``
-          - track (``bool``) [default: ``False``] If ``True`` the results 
+          - track (``bool``) [default: ``False``] If ``True`` the results
             (or exceptions) of a **task** are saved within:
-            ``self._tasks_tracked[%task_id%]`` as a ``{index:result}`` 
-            dictionary. This is only useful if the callable "func" creates 
-            persistant data. The dictionary can be used to restore the correct 
+            ``self._tasks_tracked[%task_id%]`` as a ``{index:result}``
+            dictionary. This is only useful if the callable "func" creates
+            persistant data. The dictionary can be used to restore the correct
             order of the data
-            
+
         """
         if not self._started.isSet():
             task = izip(repeat(len(self._tasks)), repeat(func), \
@@ -543,13 +543,13 @@ class NuMap(object):
     def pop_task(self, number):
         """
         Removes a previously added **task** from the ``NuMap`` instance.
-        
+
         Arguments:
-        
-          - number (``int`` or ``True``) A positive integer specifying the 
+
+          - number (``int`` or ``True``) A positive integer specifying the
             number of **tasks** to pop. If  number is set ``True`` all **tasks**
             will be popped.
-        
+
         """
         if not self._started.isSet():
             if number is True:
@@ -566,11 +566,11 @@ class NuMap(object):
 
     def get_task(self, task=0, timeout=None, block=True):
         """
-        Returns an iterator which results are limited to one **task**. The 
+        Returns an iterator which results are limited to one **task**. The
         default iterator the one which e.g. will be used in a for loop is the
-        iterator for the first task (task =0). The returned iterator is a 
+        iterator for the first task (task =0). The returned iterator is a
         ``_NuMapTask`` instance.
-        
+
         Compare::
 
             for result_from_task_0 in imap_instance:
@@ -588,25 +588,25 @@ class NuMap(object):
 
             for (task_1_res, task_0_res) in izip(task_0_iterator, task_1_iterator):
                 pass
-        
+
         """
         return _NuMapTask(self, task=task, timeout=timeout, block=block)
 
     def start(self, stages=(1, 2)):
         """
-        Starts the processes or threads in the internal pool and the threads, 
-        which manage the **worker pool** input and output queues. The 
-        **starting mode** is split into **two stages**, which can be initiated 
-        seperately. After the first stage the **worker pool** processes or 
+        Starts the processes or threads in the internal pool and the threads,
+        which manage the **worker pool** input and output queues. The
+        **starting mode** is split into **two stages**, which can be initiated
+        seperately. After the first stage the **worker pool** processes or
         threads are  started and the ``NuMap._started`` event is set ``True``.
-        A call to the ``NuMap.next`` method **will** block. After the **second 
+        A call to the ``NuMap.next`` method **will** block. After the **second
         stage** the ``NuMap._pool_putter`` and ``NuMap._pool_getter`` threads
-        will be running. The ``NuMap.next`` method should only be called **after** 
+        will be running. The ``NuMap.next`` method should only be called **after**
         this method returns.
 
         Arguments:
-        
-          - stages (``tuple``) [default: ``(1, 2)``] Specifies which stages of 
+
+          - stages (``tuple``) [default: ``(1, 2)``] Specifies which stages of
             the start process to execute, by default both stages.
 
         """
@@ -621,33 +621,33 @@ class NuMap(object):
     def stop(self, ends=None, forced=False):
         """
         Stops an ``NuMap`` instance. If the list of end tasks is specified *via*
-        the "ends" argument a call to ``NuMap.stop`` will block the calling 
-        thread and retrieve (discards) a maximum of 2 * stride of results. This 
-        will stop  the worker pool and the threads which manage its input and 
-        output queues respectively. 
-                
-        If the "ends" argument is not specified, but the "forced" argument is 
+        the "ends" argument a call to ``NuMap.stop`` will block the calling
+        thread and retrieve (discards) a maximum of 2 * stride of results. This
+        will stop  the worker pool and the threads which manage its input and
+        output queues respectively.
+
+        If the "ends" argument is not specified, but the "forced" argument is
         the method does not block and the ``NuMap._stop`` has to be called after
         **all** pending results have been retrieved. Calling ``NuMap._stop`` with
         pending results **will** dead-lock.
-        
+
         Either "ends" or "forced" has to be ``True``.
-        
+
         Arguments:
 
           - ends (``list``) [default: ``None``] A list of task ids which are not
             consumed within the ``NuMap`` instance.
-          - forced (``bool``) [default: ``False``] If "ends" is not ``None`` 
-            this argument is ignored. If "ends" is ``None`` and "forced" is 
+          - forced (``bool``) [default: ``False``] If "ends" is not ``None``
+            this argument is ignored. If "ends" is ``None`` and "forced" is
             ``True`` the ``NuMap`` instance will trigger *stopping mode*.
-            
+
         """
         if self._started.isSet():
             if ends:
                 self._stopping.set()
-                # if _stopping is set the pool putter will notify the weave 
-                # generator that no more new results are needed. The weave 
-                # generator will stop _before_ getting the first result from 
+                # if _stopping is set the pool putter will notify the weave
+                # generator that no more new results are needed. The weave
+                # generator will stop _before_ getting the first result from
                 # task 0 in the next stride.
                 log.debug('%s begins stopping routine' % self)
                 to_do = ends[:] # if ends else ends
@@ -665,7 +665,7 @@ class NuMap(object):
                         except Exception, excp:
                             log.debug('%s task %s raised exception %s' % \
                                       (self, task, excp))
-                # stop threads remove queues 
+                # stop threads remove queues
                 self._stop()
                 log.debug('%s finished stopping routine' % self)
             elif forced:
@@ -683,16 +683,16 @@ class NuMap(object):
         """
         Returns the next result for the given **task**. Defaults to ``0``, which
         is the first **task**. If multiple chained tasks are evaluated then the
-        next method of only the last should be called directly. 
-                
+        next method of only the last should be called directly.
+
         Arguments:
-        
-          - timeout (``float``) Number of seconds to wait until a 
+
+          - timeout (``float``) Number of seconds to wait until a
             ``TimeoutError`` is raised.
           - task (``int``) id of the task from the ``NuMap`` instance
-          - block (``bool``) if ``True`` call will block until result is 
+          - block (``bool``) if ``True`` call will block until result is
             available
-            
+
         """
         # check if any result is expected (started and not finished)
         if not self._started.isSet():
@@ -718,9 +718,9 @@ class NuMap(object):
             self._task_next_lock[task].acquire()
             log.debug('%s timeout for result: ordered %s, task %s' % \
                       (self, self.ordered, task))
-            # the threads might have switched between the exception and the 
-            # lock.acquire during this switch several items could have been 
-            # submited to the queue if one of them is the one we are waiting 
+            # the threads might have switched between the exception and the
+            # lock.acquire during this switch several items could have been
+            # submited to the queue if one of them is the one we are waiting
             # for we get it here immediately, but lock the pool getter not to
             # submit more results.
             try:
@@ -766,49 +766,49 @@ class NuMap(object):
 def imports(modules, forgive=False):
     """
     Should be used as a decorator to *attach* import statments to function
-    definitions. These imports are added to the global (i.e. module-level of 
+    definitions. These imports are added to the global (i.e. module-level of
     the decorated function) namespace.
-        
+
     Two forms of import statements are supported (in the following examples
     ``foo``, ``bar``, ``oof, and ``rab`` are modules not classes or functions)::
 
         import foo, bar              # -> @imports(['foo', 'bar'])
-        import foo.oof as oof            
+        import foo.oof as oof
         import bar.rab as rab        # -> @imports(['foo.oof', 'bar.rab'])
-        
+
     It provides support for alternatives::
-    
+
         try:
             import foo
         except ImportError:
             import bar
-            
+
     which is expressed as::
-    
+
         @imports(['foo,bar'])
-        
+
     or alternatively::
-    
+
         try:
             import foo.oof as oof
         except ImportError:
             import bar.rab as oof
-            
+
     becomes::
-    
+
         @imports(['foo.oof,bar.rab'])
-        
-    
+
+
     This import is available in the body of the function as ``oof`` All needed
     imports should be attached for every function (even if two function are in
     the same module and have the same ``globals``)
 
     Arguments:
 
-        - modules (``list``) A list of modules in the following forms 
-          ``['foo', 'bar', ..., 'baz']`` or  
+        - modules (``list``) A list of modules in the following forms
+          ``['foo', 'bar', ..., 'baz']`` or
           ``['foo.oof', 'bar.rab', ..., 'baz.zab']``
-        - forgive (``bool``) [default: ``False``] If ``True`` will not raise 
+        - forgive (``bool``) [default: ``False``] If ``True`` will not raise
           `ImportError``
     """
     def wrap(f):
@@ -844,17 +844,17 @@ def imports(modules, forgive=False):
 
 class _Weave(object):
     """
-    (internal) Weaves a sequence of iterators, which can be stopped if the same 
+    (internal) Weaves a sequence of iterators, which can be stopped if the same
     number of results has been consumed from all iterators (repeats boundaries).
 
     Arguments:
-    
-      - iterators (iterable) A sequence of objects supporting the iterator 
+
+      - iterators (iterable) A sequence of objects supporting the iterator
         protocol.
-      - repeats (``int``) [default: ``1``] A positive integer defining the 
+      - repeats (``int``) [default: ``1``] A positive integer defining the
         number of results to retrieve from one iterator before the next iterator
         in the sequence.
-        
+
     """
     def __init__(self, iterators, repeats=1):
         self.iterators = iterators          # sequence of iterators
@@ -900,10 +900,10 @@ class _NuMapTask(object):
     """
     (internal) the ``_NumMapTask`` is an object-wrapper of ``NuMap`` instaces.
     It is an interator over the results from a single **task**.
-    
+
     Arguments:
-    
-        - iterator (``NuMap``) instance to be wrapped, usually initialization 
+
+        - iterator (``NuMap``) instance to be wrapped, usually initialization
           is done by the ``NuMap.get_task``
 
     """
@@ -918,7 +918,7 @@ class _NuMapTask(object):
 
     def next(self):
         """
-        Returns a result if availble within "timeout" else raises a 
+        Returns a result if availble within "timeout" else raises a
         ``TimeoutError`` exception. See documentation for ``NuMap.next``.
         """
         return self.iterator.next(task=self.task, timeout=self.timeout,
@@ -927,7 +927,7 @@ class _NuMapTask(object):
 
 class _PriorityQueue(Queue):
     """
-    (internal) a priority queue using a heap on a list. This queue can be used 
+    (internal) a priority queue using a heap on a list. This queue can be used
     with "thread", but not "process" ``NuMap`` instances.
     """
     def _init(self, maxsize):
@@ -945,7 +945,7 @@ def _pool_worker(inqueue, outqueue, host=None):
     """
     (internal) Function which is executed by worker pool processes or threads.
     It waits for tasks (function, data, arguments) at the input queue "inqueue"
-    evaluates the result and passes it to the output queue "outqueue". It 
+    evaluates the result and passes it to the output queue "outqueue". It
     optionally evaluates the function on a remote host.
     """
     put = outqueue.put
@@ -962,32 +962,37 @@ def _pool_worker(inqueue, outqueue, host=None):
         conn = rpyc.classic.connect(*host_port)
         conn.execute(getsource(imports)) # provide @imports on server
 
-    while True:
-        try:
-            #gc.disable()
-            task = get()
-            #gc.enable()
-        except (EOFError, IOError):
-            break
+    try:
+        while True:
+            try:
+                #gc.disable()
+                task = get()
+                #gc.enable()
+            except (EOFError, IOError):
+                break
 
-        if task is None:
-            put(None)
-            break
+            if task is None:
+                put(None)
+                break
 
-        if task[1] is None:
-            put(task)
-            continue
+            if task[1] is None:
+                put(task)
+                continue
 
-        job, func, args, kwargs, (i, data) = task
-        if host:
-            func = func._inject(conn) if hasattr(func, '_inject') else\
-                   _inject_func(func, conn)
-        try:
-            ok, result = (True, func(data, *args, **kwargs))
-        except Exception, excp:
-            ok, result = (False, excp)
-            #gc.disable(), gc.enable()
-        put((job, i, ok, result))
+            job, func, args, kwargs, (i, data) = task
+            if host:
+                func = func._inject(conn) if hasattr(func, '_inject') else\
+                       _inject_func(func, conn)
+            try:
+                ok, result = (True, func(data, *args, **kwargs))
+            except Exception, excp:
+                ok, result = (False, excp)
+                #gc.disable(), gc.enable()
+            put((job, i, ok, result))
+    except:
+        print 'ERROR: pool_worker exception'
+        import time; time.sleep(10)
+        raise ValueError('pool_worker exception')
 
 def _inject_func(func, conn):
     """
